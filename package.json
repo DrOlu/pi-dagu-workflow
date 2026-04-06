@@ -1,0 +1,44 @@
+{
+  "name": "pi-dagu-workflow",
+  "version": "1.0.0",
+  "description": "Pi extension for Dagu workflow orchestration - create, validate, deploy and manage Dagu workflows",
+  "main": "src/index.ts",
+  "type": "module",
+  "keywords": [
+    "pi",
+    "dagu",
+    "workflow",
+    "automation",
+    "orchestration",
+    "scheduler",
+    "cron",
+    "pipeline",
+    "extension"
+  ],
+  "author": "pi-dagu-workflow",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pi-extensions/pi-dagu-workflow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pi-extensions/pi-dagu-workflow/issues"
+  },
+  "homepage": "https://github.com/pi-extensions/pi-dagu-workflow#readme",
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": ">=1.0.0",
+    "@sinclair/typebox": ">=0.32.0"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "EXAMPLES.md",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "echo 'Error: no test specified' && exit 1"
+  }
+}
