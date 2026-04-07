@@ -51,9 +51,9 @@ export default function (pi: ExtensionAPI) {
       
       try {
         if (platform === "darwin") {
-          await ctx.tools.bash({ command: "brew install dagu-org/dagu/dagu" });
+          await pi.exec("brew", ["install", "dagu-org/dagu/dagu"]);
         } else if (platform === "linux") {
-          await ctx.tools.bash({ command: "curl -fsSL https://dagu.dev/install.sh | sh" });
+          await pi.exec("sh", ["-c", "curl -fsSL https://dagu.dev/install.sh | sh"]);
         } else {
           ctx.ui.notify("Please install Dagu manually from https://dagu.dev", "error");
           return;
@@ -77,15 +77,11 @@ export default function (pi: ExtensionAPI) {
       }
 
       try {
-        await ctx.tools.bash({ 
-          command: "nohup dagu scheduler > ~/.dagu/scheduler.log 2>&1 &" 
-        });
+        await pi.exec("sh", ["-c", "nohup dagu scheduler > ~/.dagu/scheduler.log 2>&1 &"]);
         
         // Wait and check
         await new Promise(resolve => setTimeout(resolve, 2000));
-        const result = await ctx.tools.bash({ 
-          command: "pgrep -f 'dagu scheduler' || echo 'not running'" 
-        });
+        const result = await pi.exec("sh", ["-c", "pgrep -f 'dagu scheduler' || echo 'not running'"]);
         
         if (result.stdout?.includes("not running")) {
           ctx.ui.notify("✗ Failed to start scheduler", "error");
@@ -106,7 +102,7 @@ export default function (pi: ExtensionAPI) {
     description: "Stop Dagu scheduler",
     handler: async (_args, ctx) => {
       try {
-        await ctx.tools.bash({ command: "pkill -f 'dagu scheduler' || true" });
+        await pi.exec("sh", ["-c", "pkill -f 'dagu scheduler' || true"]);
         schedulerRunning = false;
         schedulerPid = null;
         ctx.ui.notify("✓ Scheduler stopped", "success");
@@ -122,9 +118,7 @@ export default function (pi: ExtensionAPI) {
     description: "List all Dagu workflows",
     handler: async (_args, ctx) => {
       try {
-        const result = await ctx.tools.bash({
-          command: "ls -la ~/.config/dagu/dags/ 2>/dev/null || echo 'No workflows found'"
-        });
+        const result = await pi.exec("sh", ["-c", "ls -la ~/.config/dagu/dags/ 2>/dev/null || echo 'No workflows found'"]);
         
         ctx.ui.notify("Workflows:", "info");
         console.log(result.stdout);
@@ -141,11 +135,9 @@ export default function (pi: ExtensionAPI) {
       const workflowName = args || "all";
       
       try {
-        const result = await ctx.tools.bash({
-          command: workflowName === "all" 
-            ? "dagu history 2>&1 | head -20 || echo 'No history available'"
-            : `dagu status ${workflowName} 2>&1 || echo 'Workflow not found'`
-        });
+        const result = await pi.exec("sh", ["-c", workflowName === "all" 
+          ? "dagu history 2>&1 | head -20 || echo 'No history available'"
+          : `dagu status ${workflowName} 2>&1 || echo 'Workflow not found'`]);
         
         ctx.ui.notify(`Status for ${workflowName}:`, "info");
         console.log(result.stdout);
@@ -206,14 +198,14 @@ export default function (pi: ExtensionAPI) {
         
         // Write to temp file for validation
         const tempFile = `/tmp/${params.name}_workflow.yaml`;
-        await ctx.tools.write({ path: tempFile, content: yaml });
+        await pi.exec("sh", ["-c", `cat > ${tempFile} << 'EOF'\n${yaml}\nEOF`]);
         
         let validationResult = { valid: true, error: null };
         
         // Validate if requested
         if (params.validate) {
           onUpdate({ toolCallId, content: [{ type: "text", text: "🔍 Validating workflow..." }] });
-          validationResult = await validateWorkflow(tempFile, ctx);
+          validationResult = await validateWorkflow(tempFile, pi);
         }
         
         // Deploy if requested and valid
@@ -221,8 +213,8 @@ export default function (pi: ExtensionAPI) {
           onUpdate({ toolCallId, content: [{ type: "text", text: "🚀 Deploying workflow..." }] });
           
           const dagsDir = `${process.env.HOME}/.config/dagu/dags`;
-          await ctx.tools.bash({ command: `mkdir -p ${dagsDir}` });
-          await ctx.tools.bash({ command: `cp ${tempFile} ${dagsDir}/${params.name}.yaml` });
+          await pi.exec("sh", ["-c", `mkdir -p ${dagsDir}`]);
+          await pi.exec("sh", ["-c", `cp ${tempFile} ${dagsDir}/${params.name}.yaml`]);
           
           onUpdate({ toolCallId, content: [{ type: "text", text: `✅ Deployed to ${dagsDir}/${params.name}.yaml` }] });
         }
@@ -259,11 +251,11 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       file_path: Type.String({ description: "Path to workflow YAML file" }),
     }),
-    async execute(toolCallId, params, signal, onUpdate, ctx) {
+    async execute(toolCallId, params, signal, onUpdate, _ctx) {
       try {
         onUpdate({ toolCallId, content: [{ type: "text", text: "🔍 Validating workflow..." }] });
         
-        const result = await validateWorkflow(params.file_path, ctx);
+        const result = await validateWorkflow(params.file_path, pi);
         
         return {
           content: [{ 
@@ -298,15 +290,13 @@ export default function (pi: ExtensionAPI) {
         description: "Parameters to pass to the workflow"
       })),
     }),
-    async execute(toolCallId, params, signal, onUpdate, ctx) {
+    async execute(toolCallId, params, signal, onUpdate, _ctx) {
       try {
         const dagsDir = `${process.env.HOME}/.config/dagu/dags`;
         const workflowFile = `${dagsDir}/${params.workflow_name}.yaml`;
         
         // Check if file exists
-        const checkResult = await ctx.tools.bash({ 
-          command: `test -f ${workflowFile} && echo "exists" || echo "not found"` 
-        });
+        const checkResult = await pi.exec("sh", ["-c", `test -f ${workflowFile} && echo "exists" || echo "not found"`]);
         
         if (checkResult.stdout?.trim() !== "exists") {
           return {
@@ -330,7 +320,7 @@ export default function (pi: ExtensionAPI) {
           command += ` -- ${paramStr}`;
         }
         
-        const result = await ctx.tools.bash({ command, timeout: 300000 }); // 5 min timeout
+        const result = await pi.exec("sh", ["-c", command], { timeout: 300000 }); // 5 min timeout
         
         return {
           content: [{ 
@@ -340,7 +330,7 @@ export default function (pi: ExtensionAPI) {
           details: {
             stdout: result.stdout,
             stderr: result.stderr,
-            exit_code: result.exit_code,
+            exit_code: result.code,
           },
         };
       } catch (err) {
@@ -361,13 +351,13 @@ export default function (pi: ExtensionAPI) {
       workflow_name: Type.String({ description: "Workflow name" }),
       run_id: Type.Optional(Type.String({ description: "Specific run ID (optional)" })),
     }),
-    async execute(toolCallId, params, signal, onUpdate, ctx) {
+    async execute(toolCallId, params, signal, onUpdate, _ctx) {
       try {
         const command = params.run_id
           ? `dagu log ${params.workflow_name} ${params.run_id} 2>&1`
           : `dagu status ${params.workflow_name} 2>&1`;
         
-        const result = await ctx.tools.bash({ command });
+        const result = await pi.exec("sh", ["-c", command]);
         
         return {
           content: [{ type: "text", text: result.stdout || "No status available" }],
@@ -402,23 +392,23 @@ export default function (pi: ExtensionAPI) {
       })),
       deploy: Type.Optional(Type.Boolean({ default: false })),
     }),
-    async execute(toolCallId, params, signal, onUpdate, ctx) {
+    async execute(toolCallId, params, signal, onUpdate, _ctx) {
       try {
         onUpdate({ toolCallId, content: [{ type: "text", text: `📝 Creating workflow from ${params.template} template...` }] });
         
         const yaml = getTemplateYAML(params.template, params.name, params.customize || {});
         
         const tempFile = `/tmp/${params.name}_workflow.yaml`;
-        await ctx.tools.write({ path: tempFile, content: yaml });
+        await pi.exec("sh", ["-c", `cat > ${tempFile} << 'EOF'\n${yaml}\nEOF`]);
         
         // Validate
-        const validation = await validateWorkflow(tempFile, ctx);
+        const validation = await validateWorkflow(tempFile, pi);
         
         // Deploy if requested
         if (params.deploy && validation.valid) {
           const dagsDir = `${process.env.HOME}/.config/dagu/dags`;
-          await ctx.tools.bash({ command: `mkdir -p ${dagsDir}` });
-          await ctx.tools.bash({ command: `cp ${tempFile} ${dagsDir}/${params.name}.yaml` });
+          await pi.exec("sh", ["-c", `mkdir -p ${dagsDir}`]);
+          await pi.exec("sh", ["-c", `cp ${tempFile} ${dagsDir}/${params.name}.yaml`]);
         }
         
         return {
@@ -455,7 +445,7 @@ export default function (pi: ExtensionAPI) {
         enum: ["start", "stop", "restart", "status"]
       }),
     }),
-    async execute(toolCallId, params, signal, onUpdate, ctx) {
+    async execute(toolCallId, params, signal, onUpdate, _ctx) {
       try {
         let result: { running: boolean; pid?: number; output?: string } = { running: false };
         
@@ -464,9 +454,7 @@ export default function (pi: ExtensionAPI) {
             onUpdate({ toolCallId, content: [{ type: "text", text: "🚀 Starting Dagu scheduler..." }] });
             
             // Check if already running
-            const checkStart = await ctx.tools.bash({ 
-              command: "pgrep -f 'dagu scheduler' || echo 'not running'" 
-            });
+            const checkStart = await pi.exec("sh", ["-c", "pgrep -f 'dagu scheduler' || echo 'not running'"]);
             
             if (!checkStart.stdout?.includes("not running")) {
               return {
@@ -475,40 +463,34 @@ export default function (pi: ExtensionAPI) {
               };
             }
             
-            await ctx.tools.bash({ 
-              command: "nohup dagu scheduler > ~/.dagu/scheduler.log 2>&1 &" 
-            });
+            await pi.exec("sh", ["-c", "nohup dagu scheduler > ~/.dagu/scheduler.log 2>&1 &"]);
             await new Promise(resolve => setTimeout(resolve, 2000));
             
-            result = await checkSchedulerStatus(ctx);
+            result = await checkSchedulerStatus(pi);
             break;
             
           case "stop":
             onUpdate({ toolCallId, content: [{ type: "text", text: "🛑 Stopping Dagu scheduler..." }] });
-            await ctx.tools.bash({ command: "pkill -f 'dagu scheduler' || true" });
+            await pi.exec("sh", ["-c", "pkill -f 'dagu scheduler' || true"]);
             await new Promise(resolve => setTimeout(resolve, 1000));
             
-            result = await checkSchedulerStatus(ctx);
+            result = await checkSchedulerStatus(pi);
             schedulerRunning = result.running;
             schedulerPid = result.pid || null;
-            
-            ctx.ui.setStatus("dagu", result.running ? "scheduler running" : "scheduler stopped");
             break;
             
           case "restart":
             onUpdate({ toolCallId, content: [{ type: "text", text: "🔄 Restarting Dagu scheduler..." }] });
-            await ctx.tools.bash({ command: "pkill -f 'dagu scheduler' || true" });
+            await pi.exec("sh", ["-c", "pkill -f 'dagu scheduler' || true"]);
             await new Promise(resolve => setTimeout(resolve, 1000));
-            await ctx.tools.bash({ 
-              command: "nohup dagu scheduler > ~/.dagu/scheduler.log 2>&1 &" 
-            });
+            await pi.exec("sh", ["-c", "nohup dagu scheduler > ~/.dagu/scheduler.log 2>&1 &"]);
             await new Promise(resolve => setTimeout(resolve, 2000));
             
-            result = await checkSchedulerStatus(ctx);
+            result = await checkSchedulerStatus(pi);
             break;
             
           case "status":
-            result = await checkSchedulerStatus(ctx);
+            result = await checkSchedulerStatus(pi);
             break;
         }
         
@@ -539,7 +521,7 @@ export default function (pi: ExtensionAPI) {
 
   async function checkDaguInstallation(): Promise<{ installed: boolean; version?: string }> {
     try {
-      const result = await pi.tools.bash({ command: "dagu version 2>&1 || echo 'not installed'" });
+      const result = await pi.exec("sh", ["-c", "dagu version 2>&1 || echo 'not installed'"]);
       const output = result.stdout?.trim() || "";
       
       if (output.includes("not installed")) {
@@ -557,9 +539,9 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  async function validateWorkflow(filePath: string, ctx: ExtensionContext): Promise<{ valid: boolean; error?: string }> {
+  async function validateWorkflow(filePath: string, piRef: ExtensionAPI): Promise<{ valid: boolean; error?: string }> {
     try {
-      const result = await ctx.tools.bash({ command: `dagu validate ${filePath} 2>&1` });
+      const result = await piRef.exec("sh", ["-c", `dagu validate ${filePath} 2>&1`]);
       
       if (result.stdout?.includes("valid") || result.stdout?.includes("succeeded")) {
         return { valid: true };
@@ -574,11 +556,9 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  async function checkSchedulerStatus(ctx: ExtensionContext): Promise<{ running: boolean; pid?: number }> {
+  async function checkSchedulerStatus(piRef: ExtensionAPI): Promise<{ running: boolean; pid?: number }> {
     try {
-      const result = await ctx.tools.bash({ 
-        command: "pgrep -f 'dagu scheduler' || echo 'not running'" 
-      });
+      const result = await piRef.exec("sh", ["-c", "pgrep -f 'dagu scheduler' || echo 'not running'"]);
       
       if (result.stdout?.includes("not running")) {
         return { running: false };

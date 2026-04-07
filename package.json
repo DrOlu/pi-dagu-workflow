@@ -1,6 +1,6 @@
 {
   "name": "pi-dagu-workflow",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Pi extension for Dagu workflow orchestration - create, validate, deploy and manage Dagu workflows",
   "main": "src/index.ts",
   "type": "module",
